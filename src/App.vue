@@ -1,82 +1,277 @@
-<script setup>
-// 定義一個變數來『記住』使用者輸入的名字。
-import { ref } from 'vue'
-// 把圖片檔案帶進來，之後可以直接拿來用。
-import photoUrl from '../變形金剛.jpg'
-const userInput = ref('')
-// 準備一個地方放「要顯示的照片路徑」。
-const photoPath = ref('')
-// 準備一個地方放「查無此人」要不要出現。
-const showNotFound = ref(false)
-// 準備一個地方放「確認找到的人名」。
-const foundName = ref('')
-// 按下按鈕時，讓照片出現。
-const showPhoto = () => {
-  // 如果名字對得上，就顯示照片；不然就顯示提示字。
-  const trimmedName = userInput.value.trim()
-  const allowNames = ['變形金剛', '柯博文']
-  if (allowNames.includes(trimmedName)) {
-    photoPath.value = photoUrl
-    showNotFound.value = false
-    foundName.value = trimmedName
-  } else {
-    photoPath.value = ''
-    showNotFound.value = true
-    foundName.value = ''
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+
+const songName = ref('')
+const loading = ref(false)
+const errorMessage = ref('')
+const result = ref(null)
+
+const hasResult = computed(() => Boolean(result.value?.topVideo))
+
+const isValidSongName = (value: string) => /^[\p{L}\p{N}\s'’"._-]+$/u.test(value)
+
+const formatDuration = (duration: string) => {
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+  if (!match) return 'LIVE'
+
+  const hours = Number(match[1] || 0)
+  const minutes = Number(match[2] || 0)
+  const seconds = Number(match[3] || 0)
+
+  const parts =
+    hours > 0
+      ? [hours, String(minutes).padStart(2, '0'), String(seconds).padStart(2, '0')]
+      : [minutes, String(seconds).padStart(2, '0')]
+
+  return parts.join(':')
+}
+
+const searchSong = async () => {
+  const query = songName.value.trim()
+
+  result.value = null
+  errorMessage.value = ''
+
+  if (!query) {
+    errorMessage.value = '請先輸入歌名'
+    return
+  }
+
+  if (!isValidSongName(query)) {
+    errorMessage.value = '歌名格式有誤，請輸入正常文字'
+    return
+  }
+
+  loading.value = true
+
+  try {
+    const response = await fetch('/api/youtube-search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || '搜尋失敗')
+    }
+
+    if (!data.topVideo) {
+      errorMessage.value = '查無此歌，請再試一次'
+      return
+    }
+
+    result.value = data
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '搜尋失敗'
+  } finally {
+    loading.value = false
   }
 }
 </script>
 
 <template>
   <div class="page">
-    <!-- 在這裡放輸入框，使用 v-model 綁定 userInput，這樣可以記住用戶輸入的值。-->
-    <h1>輸入您的名字，按下按鈕後顯示結果</h1>
-    <input type="text" v-model="userInput" placeholder="請輸入照片名稱" />
-    <button @click="showPhoto">顯示圖片</button>
-    <p class="hint">提示：輸入變形金剛或柯博文才會顯示圖片</p>
-    <!-- 只有在找到時，才顯示名字。 -->
-    <p v-if="foundName">您輸入的名字是：{{ foundName }}</p>
-    <!-- 只有在找不到時，才顯示這句話。 -->
-    <p v-if="showNotFound">查無此人</p>
-    <!-- 這裡是「畫框」，有照片路徑時就會顯示照片。 -->
-    <img v-if="photoPath" :src="photoPath" alt="變形金剛" />
+    <div class="search-box">
+      <h1>音樂搜尋</h1>
+      <p class="hint">輸入名稱後，即顯示結果</p>
+
+      <div class="search-row">
+        <input v-model="songName" type="text" placeholder="請輸入歌名" @keyup.enter="searchSong" />
+        <button :disabled="loading" @click="searchSong">
+          {{ loading ? '搜尋中...' : '搜尋' }}
+        </button>
+      </div>
+
+      <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+
+      <div v-if="hasResult" class="result-card">
+        <p class="result-label">搜尋結果</p>
+        <a class="video-card" :href="result.topVideo.url" target="_blank" rel="noopener noreferrer">
+          <div class="video-thumb">
+            <img :src="result.topVideo.thumbnail" :alt="result.topVideo.title" />
+            <div class="video-overlay">
+              <p class="thumb-title">{{ result.topVideo.title }}</p>
+              <p class="thumb-subtitle">{{ result.topVideo.channelTitle }}</p>
+            </div>
+            <span class="video-duration">{{ formatDuration(result.topVideo.duration) }}</span>
+          </div>
+
+          <div class="video-meta">
+            <p class="video-date">發布時間：{{ result.topVideo.publishedAt.slice(0, 10) }}</p>
+            <p class="video-click">觀看次數：{{ result.topVideo.viewCount.toLocaleString() }}</p>
+          </div>
+        </a>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-/* 在這裡可新增樣式，如果需要更改畫面外觀 */
-/* 讓整個區塊有深色背景。 */
 .page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: #0f0f0f;
   color: #f2f2f2;
-  min-height: 100vh;
   padding: 24px;
 }
+
+.search-box {
+  width: min(100%, 720px);
+  padding: 28px;
+  border: 1px solid #2f2f2f;
+  border-radius: 16px;
+  background: #171717;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.hint {
+  margin-top: 8px;
+  color: #b5b5b5;
+  font-size: 14px;
+}
+
+.search-row {
+  margin-top: 18px;
+  display: flex;
+  gap: 12px;
+}
+
 input {
-  margin-right: 20px;
-  padding: 5px;
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
   background: #1c1c1c;
   color: #f2f2f2;
-  border: 1px solid #3a3a3a;
 }
+
 input::placeholder {
-  color: #b5b5b5;
+  color: #8f8f8f;
 }
+
 button {
-  padding: 5px 10px;
+  padding: 12px 16px;
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
   background: #2c2c2c;
   color: #f2f2f2;
-  border: 1px solid #3a3a3a;
+  cursor: pointer;
 }
-img {
+
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.error {
+  margin-top: 14px;
+  color: #ff8f8f;
+}
+
+.result-card {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #101010;
+  border: 1px solid #2f2f2f;
+}
+
+.result-label {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #8ab4ff;
+  font-weight: 700;
+}
+
+.video-card {
   display: block;
-  margin-top: 12px;
-  max-width: 280px;
-  border-radius: 16px;
+  margin-top: 8px;
+  border-radius: 18px;
+  border: 1px solid #2f2f2f;
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
 }
-.hint {
-  margin-top: 6px;
-  font-size: 10px;
+
+.video-card:hover {
+  border-color: #8ab4ff;
+}
+
+.video-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #222;
+}
+
+.video-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.video-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.55));
+}
+
+.video-overlay {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 1;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
+}
+
+.thumb-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.thumb-subtitle {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.video-duration {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 12px;
+}
+
+.video-meta {
+  padding: 12px 14px 14px;
+}
+
+.video-date,
+.video-click {
+  margin: 0;
+}
+
+.video-date {
   color: #b5b5b5;
+}
+
+.video-click {
+  margin-top: 6px;
+  color: #8ab4ff;
 }
 </style>

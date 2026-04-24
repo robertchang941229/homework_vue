@@ -88,3 +88,20 @@ npm run lint
 - AI是用分步驟的方式，讓我知道要如何才能開啟網頁及作調整，也會詳細解釋程式碼的功用，讓我可以很快明白程式的意思，也有列出更改的項目及檔案名稱，方便我去作查找
 - 使用的模型也會有差別，如果使用GPT-4o輸出的成果會比較不知道在寫甚麼，但用GPT-5.2後，就可以很清楚獲得資料
 
+## 這次的音樂搜尋版
+
+- 這個版本會讓使用者輸入歌名，然後由 YouTube API 查出最熱門的影片。
+- 畫面會顯示影片縮圖、名稱、頻道、發布時間與觀看次數。
+- 點卡片後會直接開啟 YouTube 影片頁。
+- 需要先建立 `.env.local`，放入 `YOUTUBE_API_KEY`。
+- 執行方式：直接用 `npm run dev` 啟動前端就可以，Vite 會提供 `/api/youtube-search`。
+
+### `.env.local` 要怎麼寫
+
+```env
+YOUTUBE_API_KEY=請換成你自己的GoogleCloud金鑰
+```
+
+- 這個 `YOUTUBE_API_KEY` 是你自己在 Google Cloud 申請的 YouTube Data API Key。
+- 它不是AI自建的，也不是 GitHub 的金鑰。
+- 前端會透過 Vite 的 API 路由去請求 YouTube 資料。
